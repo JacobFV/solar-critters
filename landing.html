@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Critters • A cozy cosmic playground</title>
+    <meta name="description" content="A dreamy Three.js solar system playground with adorable procedural animals and free P2P multiplayer." />
+    <meta property="og:title" content="Solar Critters" />
+    <meta property="og:description" content="A dreamy Three.js solar system playground with adorable procedural animals and free P2P multiplayer." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://solar-critters.vercel.app" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <style>
+      :root { --fg: #e9efff; --muted: #b5c1ee; --accent: #6ea8ff; }
+      html, body { margin: 0; height: 100%; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: var(--fg); background: radial-gradient(ellipse at 60% 30%, #1a2250, #0b0f28 60%, #050713 100%); overflow-x: hidden; }
+      .wrap { min-height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+      header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; }
+      header .brand { font-weight: 800; letter-spacing: 0.5px; }
+      header nav a { color: var(--muted); text-decoration: none; margin-left: 12px; }
+      .hero { position: relative; padding: 8vh 6vw; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items: center; }
+      .hero h1 { margin: 0 0 10px; font-size: clamp(32px, 5vw, 56px); line-height: 1.05; }
+      .hero p { color: var(--muted); font-size: clamp(14px, 2.2vw, 18px); }
+      .cta { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+      .btn { background: var(--accent); color: #051028; border: 0; padding: 12px 16px; border-radius: 12px; font-weight: 800; cursor: pointer; text-decoration: none; }
+      .btn.secondary { background: #22314f; color: var(--fg); }
+      .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
+      .card { border: 1px solid #2a3350; border-radius: 12px; padding: 14px; background: rgba(13,18,38,0.6); }
+      footer { padding: 12px 18px; color: var(--muted); font-size: 12px; }
+      canvas#bg { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+      @media (max-width: 900px) { .hero { grid-template-columns: 1fr; padding-top: 6vh; } .cards { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <canvas id="bg"></canvas>
+    <div class="wrap">
+      <header>
+        <div class="brand">Solar Critters</div>
+        <nav>
+          <a href="https://github.com/JacobFV/solar-critters" target="_blank">GitHub</a>
+          <a href="/play">Play</a>
+        </nav>
+      </header>
+      <main class="hero">
+        <div>
+          <h1>A cozy cosmic playground</h1>
+          <p>
+            Orbiting worlds, shimmering stars, and charming little beings who leap between planets. Bring friends—free peer‑to‑peer multiplayer built in.
+          </p>
+          <div class="cta">
+            <a id="play" class="btn" href="/play">Play now</a>
+            <a class="btn secondary" href="https://github.com/JacobFV/solar-critters" target="_blank">Contribute</a>
+          </div>
+          <div class="cards">
+            <div class="card">Procedural planets with atmospheres, rings, and moons</div>
+            <div class="card">Skinned critters: worms, insects, bipeds, quadrupeds</div>
+            <div class="card">Bloom, nebulae, fireflies, hearts, and a smiling sun</div>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="min-height: 260px;">
+            <div style="font-weight:700;margin-bottom:6px;">Multiplayer</div>
+            <div style="color:var(--muted)">Share a room link from the start screen to play together. No servers required.
+            </div>
+            <div style="margin-top:10px;display:flex;gap:10px;">
+              <button class="btn" id="quick">Quick host</button>
+              <button class="btn secondary" id="join">Join room…</button>
+            </div>
+          </div>
+        </div>
+      </main>
+      <footer>
+        MIT © Contributors · Follow the repo for updates · Built with Three.js
+      </footer>
+    </div>
+    <script>
+      // Simple starry gradient background
+      const c = document.getElementById('bg'); const ctx = c.getContext('2d');
+      function resize(){ c.width = innerWidth; c.height = innerHeight; draw(); }
+      addEventListener('resize', resize, {passive:true}); resize();
+      function draw(){ const g = ctx.createRadialGradient(c.width*0.6,c.height*0.3,20,c.width*0.6,c.height*0.3,Math.max(c.width,c.height));
+        g.addColorStop(0,'#1a2250'); g.addColorStop(0.6,'#0b0f28'); g.addColorStop(1,'#050713');
+        ctx.fillStyle=g; ctx.fillRect(0,0,c.width,c.height);
+        for(let i=0;i<180;i++){ const x=Math.random()*c.width,y=Math.random()*c.height,s=Math.random()*1.5;
+          ctx.fillStyle=`hsla(${200+Math.random()*60},100%,${70+Math.random()*20}%,0.9)`; ctx.fillRect(x,y,s,s);
+        }
+      }
+      // Quick UX helpers
+      const play = document.getElementById('play');
+      const quick = document.getElementById('quick');
+      const join = document.getElementById('join');
+      quick.onclick = () => { const room=`garden-${Math.random().toString(36).slice(2,6)}-${Math.floor(Math.random()*900+100)}`; location.href = `/play#${room}`; };
+      join.onclick = () => { const room=prompt('Enter room ID'); if(room) location.href = `/play#${room}`; };
+      // On GitHub Pages, /play should point to the app index
+      if (location.hostname.includes('github.io')) {
+        play.href = location.pathname.replace(/\/$/,'') + '/';
+        quick.onclick = () => { const room=`garden-${Math.random().toString(36).slice(2,6)}-${Math.floor(Math.random()*900+100)}`; location.href = location.pathname.replace(/\/$/,'') + '/#' + room; };
+        join.onclick = () => { const room=prompt('Enter room ID'); if(room) location.href = location.pathname.replace(/\/$/,'') + '/#' + room; };
+      }
+    </script>
+  </body>
+</html>
