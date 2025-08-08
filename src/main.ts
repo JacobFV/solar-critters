@@ -634,9 +634,11 @@ function applyConfig(key: GameConfigKey) {
 }
 
 // Minimal state sync (future use)
-type Role = 'host' | null
+type Role = 'host' | 'client' | null
 let peer: Peer | null = null
 let connections: any[] = []
+let myName = 'Guest'
+const remoteCursors: { name: string; mesh: THREE.Sprite }[] = []
 function initMultiplayer(role: Role, roomId?: string) {
   if (!role && !roomId) return
   peer = new Peer({ debug: 1 })
@@ -658,14 +660,15 @@ function initMultiplayer(role: Role, roomId?: string) {
 }
 
 // Expose a start function for the start screen
-;(window as any).startGame = (cfg: GameConfigKey, role: Role, roomId?: string) => {
+;(window as any).startGame = (cfg: GameConfigKey, role: Role, roomId?: string, name?: string) => {
   applyConfig(cfg)
+  myName = name || 'Guest'
   initMultiplayer(role, roomId)
 }
 
 // ---------- Simple state sync ----------
 type Msg =
-  | { t: 'camera'; p: { x: number, y: number, z: number }; g: { x: number, y: number, z: number } }
+  | { t: 'camera'; name: string; p: { x: number, y: number, z: number }; g: { x: number, y: number, z: number } }
   | { t: 'seed'; s: number }
 
 function broadcast(msg: Msg) {
@@ -677,7 +680,17 @@ function broadcast(msg: Msg) {
 function handleRemote(msg: Msg) {
   switch (msg.t) {
     case 'camera':
-      // Optionally show a ghost camera target for other players (future UI hook)
+      // Show/update a remote presence sprite at their target
+      const key = msg.name
+      let cur = remoteCursors.find(c => c.name === key)
+      if (!cur) {
+        const spr = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x9cc3ff, opacity: 0.9 }))
+        spr.scale.set(2, 2, 1)
+        scene.add(spr)
+        cur = { name: key, mesh: spr }
+        remoteCursors.push(cur)
+      }
+      cur.mesh.position.set(msg.g.x, msg.g.y, msg.g.z)
       break
     case 'seed':
       // Could reinit noise/positions based on shared seed (not applied retroactively here)
@@ -690,7 +703,7 @@ setInterval(() => {
   if (!peer || connections.length === 0) return
   const p = camera.position
   const g = controls.target
-  broadcast({ t: 'camera', p: { x: p.x, y: p.y, z: p.z }, g: { x: g.x, y: g.y, z: g.z } })
+  broadcast({ t: 'camera', name: myName, p: { x: p.x, y: p.y, z: p.z }, g: { x: g.x, y: g.y, z: g.z } })
 }, 200)
 
 // ---------- Helpers ----------

@@ -40,6 +40,8 @@
           </div>
           <div class="card">
             <h2>Multiplayer (optional)</h2>
+            <label>Your name</label>
+            <input id="name" type="text" placeholder="e.g. Scrappy" value="Guest">
             <label>Room ID</label>
             <input id="room" type="text" placeholder="e.g. cozy-garden-1234">
             <div class="actions">
@@ -62,6 +64,7 @@
     <script>
       const startEl = document.getElementById('start');
       const roomEl = document.getElementById('room');
+      const nameEl = document.getElementById('name');
       const pick = () => (document.querySelector('input[name="cfg"]:checked')||{}).value || 'eden';
       let mpMode = null; // 'host' | 'client' | null
       document.getElementById('create').onclick = () => {
@@ -76,13 +79,13 @@
         mpMode = 'client';
       };
       document.getElementById('startBtn').onclick = () => {
-        const cfg = pick(); const room = roomEl.value || null;
-        window.startGame && window.startGame(cfg, mpMode, room || undefined);
+        const cfg = pick(); const room = roomEl.value || null; const name = nameEl.value || 'Guest';
+        window.startGame && window.startGame(cfg, mpMode, room || undefined, name);
         startEl.style.display = 'none';
       };
       document.getElementById('skipMp').onclick = () => {
-        const cfg = pick();
-        window.startGame && window.startGame(cfg, null, undefined);
+        const cfg = pick(); const name = nameEl.value || 'Guest';
+        window.startGame && window.startGame(cfg, null, undefined, name);
         startEl.style.display = 'none';
       };
       // Auto-fill from URL hash
