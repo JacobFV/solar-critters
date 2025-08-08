@@ -77,6 +77,26 @@ sunLight.shadow.mapSize.set(2048, 2048)
 sunLight.shadow.bias = -0.0005
 scene.add(sunLight)
 
+// ---------- Seeded RNG ----------
+function hashStringToInt32(str: string): number {
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+function mulberry32(seed: number) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed)
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+let worldSeed = 'default'
+let seededRandom: () => number = Math.random
+
 // Stars background (Boltzmann-like temperature distribution + blackbody colors)
 function kelvinToRGB(tempK: number): THREE.Color {
   // Approximate blackbody color (1000K - 40000K) per Tanner Helland / simplified
@@ -130,8 +150,8 @@ function sampleStarTemperature(): number {
   // Sample 2500K..12000K with bias toward ~5500K (sunlike), loosely Boltzmann-like
   const Tmin = 2500
   const Tmax = 12000
-  const u = Math.random()
-  const v = Math.random()
+  const u = seededRandom()
+  const v = seededRandom()
   // Log-bias mixture for variety
   const bias = Math.pow(u, 0.6) * 0.6 + Math.pow(v, 2.0) * 0.4
   return Tmin * Math.pow(Tmax / Tmin, bias)
@@ -142,9 +162,9 @@ const starCount = 15000
 const starPositions = new Float32Array(starCount * 3)
 const starColors = new Float32Array(starCount * 3)
 for (let i = 0; i < starCount; i++) {
-  const r = THREE.MathUtils.randFloat(200, 900)
-  const theta = Math.random() * Math.PI * 2
-  const phi = Math.acos(THREE.MathUtils.randFloatSpread(2))
+  const r = THREE.MathUtils.lerp(200, 900, seededRandom())
+  const theta = seededRandom() * Math.PI * 2
+  const phi = Math.acos(THREE.MathUtils.lerp(-1, 1, seededRandom()))
   starPositions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta)
   starPositions[i * 3 + 1] = r * Math.cos(phi)
   starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta)
@@ -305,7 +325,7 @@ function makeTreeTexture(size = 128): THREE.CanvasTexture {
 
 // ---------- Planet System ----------
 const planets: Planet[] = []
-const noise3D = createNoise3D()
+let noise3D = createNoise3D()
 
 function createPlanet(params: Omit<Planet, 'mesh' | 'pivot'>): Planet {
   const geometry = new THREE.SphereGeometry(params.radius, 64, 64)
@@ -363,13 +383,27 @@ function createPlanet(params: Omit<Planet, 'mesh' | 'pivot'>): Planet {
   )
   mesh.add(atmosphere)
 
-  // A few billboards as simple "trees" using fractal-like branching texture
-  const treeCount = Math.floor(THREE.MathUtils.mapLinear(params.radius, 3, 6, 24, 64))
-  const treeMat = new THREE.SpriteMaterial({ map: makeTreeTexture(), transparent: true, depthWrite: false })
+  // Trees are generated in generateTreesForPlanet to allow reseeding
+  return planet
+}
+
+const sharedTreeTexture = makeTreeTexture()
+const sharedTreeMat = new THREE.SpriteMaterial({ map: sharedTreeTexture, transparent: true, depthWrite: false })
+function clearTreesForPlanet(planet: Planet) {
+  const toRemove: THREE.Object3D[] = []
+  for (const c of planet.mesh.children) {
+    if ((c as any).userData && (c as any).userData.tree) toRemove.push(c)
+  }
+  toRemove.forEach(c => planet.mesh.remove(c))
+}
+function generateTreesForPlanet(planet: Planet) {
+  clearTreesForPlanet(planet)
+  const treeCount = Math.floor(THREE.MathUtils.mapLinear(planet.radius, 3, 6, 24, 64))
   for (let i = 0; i < treeCount; i++) {
-    const sprite = new THREE.Sprite(treeMat)
-    const lat = THREE.MathUtils.mapLinear(Math.random(), 0, 1, -Math.PI / 2, Math.PI / 2)
-    const lon = Math.random() * Math.PI * 2
+    const sprite = new THREE.Sprite(sharedTreeMat)
+    ;(sprite as any).userData = { tree: true }
+    const lat = THREE.MathUtils.mapLinear(seededRandom(), 0, 1, -Math.PI / 2, Math.PI / 2)
+    const lon = seededRandom() * Math.PI * 2
     const n = noise3D(Math.cos(lon) * 2, Math.sin(lat) * 2, Math.sin(lon) * 2)
     const scale = THREE.MathUtils.lerp(0.8, 1.6, (n + 1) / 2)
     sprite.scale.setScalar(scale)
@@ -377,12 +411,11 @@ function createPlanet(params: Omit<Planet, 'mesh' | 'pivot'>): Planet {
       Math.cos(lat) * Math.cos(lon),
       Math.sin(lat),
       Math.cos(lat) * Math.sin(lon)
-    ).multiplyScalar(params.radius * 1.01)
+    ).multiplyScalar(planet.radius * 1.01)
     sprite.position.copy(pos)
     sprite.lookAt(new THREE.Vector3(0, 0, 0))
-    mesh.add(sprite)
+    planet.mesh.add(sprite)
   }
-  return planet
 }
 
 // A few colorful planets with different gravity strengths
@@ -669,7 +702,7 @@ function initMultiplayer(role: Role, roomId?: string) {
 // ---------- Simple state sync ----------
 type Msg =
   | { t: 'camera'; name: string; p: { x: number, y: number, z: number }; g: { x: number, y: number, z: number } }
-  | { t: 'seed'; s: number }
+  | { t: 'seed'; s: string }
 
 function broadcast(msg: Msg) {
   for (const c of connections) {
@@ -693,7 +726,7 @@ function handleRemote(msg: Msg) {
       cur.mesh.position.set(msg.g.x, msg.g.y, msg.g.z)
       break
     case 'seed':
-      // Could reinit noise/positions based on shared seed (not applied retroactively here)
+      reseedWorld(msg.s)
       break
   }
 }
@@ -705,6 +738,12 @@ setInterval(() => {
   const g = controls.target
   broadcast({ t: 'camera', name: myName, p: { x: p.x, y: p.y, z: p.z }, g: { x: g.x, y: g.y, z: g.z } })
 }, 200)
+
+// Host occasionally broadcasts the seed so late-joiners match the world
+setInterval(() => {
+  if (!peer || connections.length === 0) return
+  broadcast({ t: 'seed', s: worldSeed })
+}, 4000)
 
 // ---------- Helpers ----------
 function getCombinedGravityAtPoint(point: THREE.Vector3): THREE.Vector3 {
@@ -1004,6 +1043,66 @@ function spawnFireflies(count = 300) {
   fireflyGroup.add(pts)
 }
 spawnFireflies(600)
+
+// Reseed world deterministically (stars, planet surfaces, trees, fireflies)
+function reseedWorld(seed: string) {
+  worldSeed = seed
+  seededRandom = mulberry32(hashStringToInt32(seed))
+  // Recreate noise with seeded RNG
+  const rnd = () => seededRandom()
+  noise3D = createNoise3D(rnd)
+
+  // Update stars
+  for (let i = 0; i < starCount; i++) {
+    const r = THREE.MathUtils.lerp(200, 900, seededRandom())
+    const theta = seededRandom() * Math.PI * 2
+    const phi = Math.acos(THREE.MathUtils.lerp(-1, 1, seededRandom()))
+    starPositions[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta)
+    starPositions[i * 3 + 1] = r * Math.cos(phi)
+    starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta)
+
+    const T = sampleStarTemperature()
+    const bb = kelvinToRGB(T)
+    const brightness = THREE.MathUtils.clamp(Math.pow(T / 6000, 4) * 0.85, 0.25, 2.2)
+    bb.multiplyScalar(brightness)
+    starColors[i * 3 + 0] = bb.r
+    starColors[i * 3 + 1] = bb.g
+    starColors[i * 3 + 2] = bb.b
+  }
+  ;(starGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true
+  ;(starGeo.attributes.color as THREE.BufferAttribute).needsUpdate = true
+
+  // Update planets: surface perturbation colors + trees
+  const temp = new THREE.Vector3()
+  for (const p of planets) {
+    const geom = p.mesh.geometry as THREE.SphereGeometry
+    const positions = geom.attributes.position as THREE.BufferAttribute
+    const colors = geom.attributes.color as THREE.BufferAttribute
+    const base = new THREE.Color(p.color)
+    const hsl = { h: 0, s: 0, l: 0 }
+    base.getHSL(hsl)
+    for (let i = 0; i < positions.count; i++) {
+      temp.fromBufferAttribute(positions, i).normalize()
+      const n = noise3D(temp.x * 1.5, temp.y * 1.5, temp.z * 1.5)
+      const scale = 1 + n * 0.05
+      positions.setXYZ(i, temp.x * p.radius * scale, temp.y * p.radius * scale, temp.z * p.radius * scale)
+      const altitude = (n + 1) * 0.5
+      const c = new THREE.Color().setHSL(
+        (hsl.h + THREE.MathUtils.mapLinear(altitude, 0, 1, -0.02, 0.02) + 1) % 1,
+        THREE.MathUtils.clamp(hsl.s + THREE.MathUtils.mapLinear(altitude, 0, 1, 0.1, -0.05), 0, 1),
+        THREE.MathUtils.clamp(hsl.l + THREE.MathUtils.mapLinear(altitude, 0, 1, -0.1, 0.18), 0, 1)
+      )
+      colors.setXYZ(i, c.r, c.g, c.b)
+    }
+    positions.needsUpdate = true
+    colors.needsUpdate = true
+    generateTreesForPlanet(p)
+  }
+
+  // Respawn fireflies
+  while (fireflyGroup.children.length) fireflyGroup.remove(fireflyGroup.children[0])
+  spawnFireflies(600)
+}
 
 // Heart burst when critter lands after a leap
 function spawnHearts(at: THREE.Vector3) {
