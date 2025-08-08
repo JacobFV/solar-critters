@@ -1,0 +1,5 @@
+/* Scene container resets */
+html, body, #app { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+
+/* GUI tweaks */
+.lil-gui.root { --background-color: rgba(10,12,25,0.85); --widget-color: rgba(22,26,40,0.9); --text-color: #cfe1ff; --focus-color: #6ea8ff; }
